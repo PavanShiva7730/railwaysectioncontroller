@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RRB Section Controller Probability</title>
+  <style>
+    body{font-family:Arial, sans-serif; padding:20px; max-width:460px; margin:0 auto;}
+    h2{margin:0 0 18px 0; text-align:center; font-size:20px;}
+    label{display:block; font-size:12px; margin-top:10px; color:#444;}
+    select,input,button{width:100%; padding:12px; margin-top:8px; box-sizing:border-box; font-size:14px;}
+    select,input{border:1px solid #cfcfcf; border-radius:6px;}
+    button{background:#1e88e5; color:#fff; border:0; border-radius:6px; cursor:pointer; font-size:16px; margin-top:14px;}
+    button:disabled{opacity:0.6; cursor:not-allowed;}
+    .result{margin-top:14px; padding:12px; background:#f5f5f5; border-radius:6px; min-height:40px;}
+    
+    .pill{display:inline-block; padding:3px 10px; border-radius:999px; font-weight:700;}
+    .high{background:#e8f5e9;}
+    .med{background:#fff8e1;}
+    .low{background:#ffebee;}
+    .high {background:#e8f5e9;color:#2e7d32;}
+.med {background:#fff3e0;color:#ef6c00;}
+.low {background:#ffebee;color:#c62828;}
+  </style>
+</head>
+
+<body>
+  <h2>RRB Section Controller Probability</h2>
+
+  <label>Zone (RRB)</label>
+  <select id="zone">
+    <option value="">Loading zones...</option>
+  </select>
+
+  <label>Category</label>
+  <select id="category">
+    <option value="">Loading categories...</option>
+  </select>
+
+  <label>Marks</label>
+  <input type="number" id="marks" placeholder="Enter Marks" step="0.01" />
+
+  <label>Mobile Number</label>
+  <input type="tel" id="mobile" placeholder="10-digit mobile number" maxlength="10" />
+
+  <button id="btn" onclick="check()">Check Probability</button>
+
+
+
+  <div class="result" id="result"></div>
+
+  <script>
+    const API = "https://script.google.com/macros/s/AKfycbwDlMfv6hdwyWj4cecjQ1dNNZrVHrC1y3OVlTzecbDY3JH3VHVUeKEn1Auqc-tdq1LWJQ/exec";
+
+    function jsonp(url) {
+      return new Promise((resolve, reject) => {
+        const cb = "cb_" + Math.random().toString(36).slice(2);
+        window[cb] = (data) => {
+          delete window[cb];
+          script.remove();
+          resolve(data);
+        };
+        const script = document.createElement("script");
+        // cache-bust to avoid stale responses
+        script.src = url + (url.includes("?") ? "&" : "?") + "callback=" + cb + "&_=" + Date.now();
+        script.onerror = () => {
+          delete window[cb];
+          script.remove();
+          reject(new Error("JSONP failed. Check deployment access = Anyone."));
+        };
+        document.body.appendChild(script);
+      });
+    }
+
+    function setResult(html) {
+      document.getElementById("result").innerHTML = html;
+    }
+
+    function setBtnLoading(isLoading) {
+      const btn = document.getElementById("btn");
+      btn.disabled = isLoading;
+      btn.textContent = isLoading ? "Checking..." : "Check Probability";
+    }
+
+    async function loadData() {
+      try {
+        const data = await jsonp(API + "?action=getData");
+
+        const zoneSel = document.getElementById("zone");
+        const catSel  = document.getElementById("category");
+
+        zoneSel.innerHTML = `<option value="">Select Zone</option>` +
+          (data.zones || []).map(z => `<option value="${escapeHtml(z)}">${escapeHtml(z)}</option>`).join("");
+
+        catSel.innerHTML = `<option value="">Select Category</option>` +
+          (data.categories || []).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+
+        if (!data.zones?.length || !data.categories?.length) {
+          setResult("No dropdown data returned. Confirm Sheet1 headers and RRB column.");
+        } else {
+          setResult("");
+        }
+
+      } catch (e) {
+        setResult("Dropdown error: " + e.message);
+      }
+    }
+
+    async function check() {
+      const zone = document.getElementById("zone").value;
+      const category = document.getElementById("category").value;
+      const marks = document.getElementById("marks").value;
+      const mobileRaw = document.getElementById("mobile").value;
+
+      const mobile = String(mobileRaw || "").replace(/\D/g, "");
+
+      if (!zone || !category || !marks || !mobile) {
+        setResult("Please select Zone, Category and enter Marks + Mobile.");
+        return;
+      }
+      if (!/^\d{10}$/.test(mobile)) {
+        setResult("Please enter a valid 10-digit mobile number.");
+        return;
+      }
+
+      setBtnLoading(true);
+
+      try {
+        const url =
+          API + "?action=saveLead" +
+          "&zone=" + encodeURIComponent(zone) +
+          "&category=" + encodeURIComponent(category) +
+          "&marks=" + encodeURIComponent(marks) +
+          "&mobile=" + encodeURIComponent(mobile);
+
+        const res = await jsonp(url);
+
+        if (!res.ok) {
+          setResult("API Error: " + (res.message || "Not saved. Cutoff missing or invalid."));
+          return;
+        }
+
+        const p = String(res.probability || "");
+        const pillClass = p === "High" ? "pill high" : (p === "Medium" ? "pill med" : "pill low");
+
+      setResult(
+  `Probability: <span class="${pillClass}">${p}</span><br><br>` +
+  `<div style="font-size:12px;color:#666;line-height:1.5;">
+  Disclaimer: This data is generated using the <b>Testbook Rank Predictor</b>. 
+  The official cut off will be released by the authority soon. 
+  This is only an estimate predictor tool.
+  </div>`
+);
+
+      } catch (e) {
+        setResult("Check error: " + e.message);
+      } finally {
+        setBtnLoading(false);
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    window.onload = loadData;
+  </script>
+</body>
+</html>
